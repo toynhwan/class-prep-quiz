@@ -183,6 +183,14 @@ export default function App() {
     loopFinished: false,  
     classType: null,      
     채점기록: [],
+    results: {
+      water: "안함",
+      restroom: "안함",
+      talk: "안함",
+      rest: "안함",
+      classroomPrep: "안함",
+      moveClassPrep: "안함"
+    },
     completedStep1Choices: [] // 이미 선택한 할 일 추적 배열
   });
 
@@ -230,6 +238,14 @@ export default function App() {
       loopFinished: false,
       classType: null,
       채점기록: [],
+      results: {
+        water: "안함",
+        restroom: "안함",
+        talk: "안함",
+        rest: "안함",
+        classroomPrep: "안함",
+        moveClassPrep: "안함"
+      },
       completedStep1Choices: []
     };
     setSessionAnswers(initialAnswers);
@@ -266,6 +282,8 @@ export default function App() {
     if (!currentQuestionObj.isBranching) {
         if (option.isCorrect) setScore(prev => prev + 1);
         updatedAnswers.채점기록.push(option.isCorrect ? 'O' : 'X');
+        // ⭐ 핵심: 푼 문제의 ID에 따라 정확히 O, X를 기록합니다!
+        updatedAnswers.results[currentQuestionObj.id] = option.isCorrect ? 'O' : 'X';
     }
 
     setSessionAnswers(updatedAnswers);
@@ -329,17 +347,13 @@ export default function App() {
         method: 'POST',
         mode: 'no-cors', 
         body: JSON.stringify({
-          date: new Date().toLocaleString(),           
           name: `${selectedClass} ${selectedStudent}`, 
-          location: "수업준비",                       
-          person: "루프포함",                           
-          score: score,                                
-          q1: sessionAnswers.채점기록[0] || "",                   
-          q2: sessionAnswers.채점기록[1] || "",                   
-          q3: sessionAnswers.채점기록[2] || "",                   
-          q4: sessionAnswers.채점기록[3] || "",                   
-          q5: sessionAnswers.채점기록[4] || "",                   
-          q6: sessionAnswers.채점기록[5] || ""                    
+          water: sessionAnswers.results.water,             // C열
+          restroom: sessionAnswers.results.restroom,       // D열
+          talk: sessionAnswers.results.talk,               // E열
+          rest: sessionAnswers.results.rest,               // F열
+          classroomPrep: sessionAnswers.results.classroomPrep, // G열
+          moveClassPrep: sessionAnswers.results.moveClassPrep  // H열
         })
       });
       
