@@ -1,1 +1,35 @@
+{
+  "name": "new-class-quiz",
+  "version": "1.0.0",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "lucide-react": "^0.344.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.2.1",
+    "autoprefixer": "^10.4.17",
+    "postcss": "^8.4.33",
+    "tailwindcss": "^3.4.1",
+    "vite": "^5.0.12"
+  }
+}
 
+
+(주의: 최신 버전 앱은 아이콘을 사용하므로 lucide-react가 추가되었습니다. 이 코드를 꼭 쓰셔야 합니다!)
+
+📝 파일 3: vite.config.js
+
+파일 이름을 정확히 적고 아래 코드를 복사해 넣습니다.
+
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+
+export default defineConfig({
+  plugins: [react()],
+})
