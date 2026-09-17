@@ -1,695 +1,387 @@
-"use client";
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 
-// 👇 선생님의 구글 시트 앱스 스크립트(웹앱) URL (그대로 유지)
-const SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzgynD6dvF4rNLqE7pe4EKRtdQNczjWye20OZU9USSghQ2BSdFqGDFfFVXbfFKL6EQkPQ/exec";
-
-// 🏫 학급 및 학생 명단 데이터
-const classData = {
-  "중 1-1": ["강나림", "김용재", "김은혜", "김태윤", "박청지", "주동현"],
-  "중 1-2": ["길도연", "김서준", "문정현", "송오성", "정지운", "추상욱"],
-  "중 2-1": ["강건욱", "강준석", "권나희", "김채영", "오승찬", "최은혁"],
-  "중 2-2": ["김준우", "김태래", "송승훈", "이정훈", "황선재", "변재원"],
-  "중 2-3": ["김소윤", "김예성", "김채은", "신한결", "이동재", "정지안"],
-  "중 2-4": ["김도현", "김지훈", "박상현", "원종빈", "이근우", "이주안"],
-  "중 3-1": ["김지원", "박현성", "설태현", "정윤호", "김진영", "조영주"],
-  "중 3-2": ["손민주", "안다율", "이성찬", "최현웅", "홍성민", "김시은"],
-  "중 3-3": ["김나은", "박민준", "박시우", "배채원", "신우성"]
-};
-
-// --- 새 퀴즈 데이터 (수업 준비 플로우차트 4지선다형 & 루프) ---
-const quizData = [
-  {
-    id: "intro",
-    category: "[도입]",
-    question: "쉬는 시간이 되었어요. 우리는 무엇을 해야 할까요?",
-    isIntro: true,
-    introImageSrc: "https://i.imgur.com/zI4RACG.jpeg", // 👈 여기에 도입부 상황 그림 이미지 링크(imgur 등)를 넣으세요!
-    options: [] 
-  },
-  {
-    id: "step1", 
-    category: "[1단계] 쉬는 시간",
-    question: "쉬는 시간이 되었습니다. 무엇을 할까요?",
-    isBranching: true, 
-    options: [
-      { id: 1, imageSrc: "https://i.imgur.com/uKTRkH3.jpeg", text: "화장실 다녀오기", rationale: "화장실을 선택하셨군요! 올바른 화장실 이용법을 알아볼까요?" },
-      { id: 2, imageSrc: "https://i.imgur.com/IgFJVPg.jpeg", text: "물 마시기", rationale: "물 마시기를 선택하셨군요! 어떻게 마셔야 할까요?" },
-      { id: 3, imageSrc: "https://i.imgur.com/b9eRaCm.jpeg", text: "복도에서 휴식하기", rationale: "복도에서 휴식하기를 선택하셨군요!" }
-    ]
-  },
-  {
-    id: "restroom",
-    category: "[채점] 화장실",
-    question: "화장실에서 대소변을 본 후, 꼭 해야 할 바른 행동은 무엇일까요?",
-    condition: (answers) => answers.lastChoice === 1,
-    hint: "용변을 본 후, 내 몸의 청결을 위해 꼭 해야 할 일을 생각해보세요.",
-    options: [
-      { id: 1, imageSrc: "https://i.imgur.com/WMnK1wI.jpeg", text: "비누를 묻혀 흐르는 물에 손을 깨끗하게 씻는다.", isCorrect: true, rationale: "위생과 전염병 예방을 위해 용변 후에는 잊지 말고 꼭 손을 씻어야 합니다." },
-      { id: 2, imageSrc: "https://i.imgur.com/8VTWv9R.jpeg", text: "귀찮으니까 손을 씻지 않고 그냥 교실로 빨리 뛰어간다.", isCorrect: false, rationale: "손을 씻지 않으면 세균이 손에 남아있어 건강에 매우 좋지 않습니다." },
-      { id: 3, imageSrc: "https://i.imgur.com/swyOmXi.jpeg", text: "물만 살짝 묻히고 수건이나 옷에 쓱쓱 닦아버린다.", isCorrect: false, rationale: "비누를 사용하지 않으면 세균이 제대로 지워지지 않습니다." },
-      { id: 4, imageSrc: "https://i.imgur.com/Kvm3U2P.jpeg", text: "친구에게 물을 튀기며 장난을 치다 교실로 돌아간다.", isCorrect: false, rationale: "화장실에서 물장난을 치면 바닥이 미끄러워져 다칠 위험이 큽니다." }
-    ]
-  },
-  {
-    id: "water",
-    category: "[채점] 물 마시기",
-    question: "물을 마실 때 가장 바른 행동은 무엇일까요?",
-    condition: (answers) => answers.lastChoice === 2,
-    hint: "깨끗하고 안전하게 물을 마시는 방법을 떠올려보세요.",
-    options: [
-      { id: 1, imageSrc: "https://i.imgur.com/XYD4Qnt.jpeg", text: "개인 텀블러나 컵을 이용하여 물을 흘리지 않게 차분히 마신다.", isCorrect: true, rationale: "개인 컵을 사용하면 위생적이고 물을 아낄 수 있습니다." },
-      { id: 2, imageSrc: "https://i.imgur.com/2q70gtX.jpeg", text: "정수기 나오는 곳에 입을 대고 바로 마신다.", isCorrect: false, rationale: "정수기에 직접 입을 대면 세균이 번식하여 비위생적입니다." },
-      { id: 3, imageSrc: "https://i.imgur.com/sA155lK.jpeg", text: "정수기 앞에서 친구와 물을 뿌리며 물장난을 친다.", isCorrect: false, rationale: "정수기 앞에서 장난을 치면 다칠 위험이 있고 다른 사람이 물을 마시기 불편합니다." },
-      { id: 4, imageSrc: "https://i.imgur.com/xB96uTk.jpeg", text: "바닥에 물을 흘려도 닦지 않고 그냥 돌아간다.", isCorrect: false, rationale: "물을 흘렸다면 미끄러지지 않도록 닦는 것이 모두를 위한 배려입니다." }
-    ]
-  },
-  {
-    id: "hallway",
-    category: "[분기] 복도 휴식",
-    question: "복도에서 어떻게 휴식할 건가요?",
-    isBranching: true,
-    condition: (answers) => answers.lastChoice === 3,
-    options: [
-      { id: 1, imageSrc: "https://i.imgur.com/6jGZAMO.jpeg", text: "친구 만나기 (대화하기)", rationale: "친구와 대화하는 상황으로 이어집니다." },
-      { id: 2, imageSrc: "https://i.imgur.com/YbAvnua.jpeg", text: "혼자 쉬기", rationale: "혼자 차분히 쉬는 상황으로 이어집니다." }
-    ]
-  },
-  {
-    id: "talk",
-    category: "[채점] 친구와 대화",
-    question: "복도에서 친구를 만나 대화할 때 알맞은 행동은 무엇일까요?",
-    condition: (answers) => answers.lastChoice === 3 && answers.hallwayChoice === 1,
-    hint: "복도는 우리 반뿐만 아니라 학교의 여러 사람이 함께 사용하는 공간입니다.",
-    options: [
-      { id: 1, imageSrc: "https://i.imgur.com/LNSsEVc.jpeg", text: "다른 반에 방해가 되지 않도록 조용하고 다정한 목소리로 대화한다.", isCorrect: true, rationale: "복도는 모두의 공간이므로 다른 사람을 배려하여 조용히 대화해야 합니다." },
-      { id: 2, imageSrc: "https://i.imgur.com/NVPxYQO.jpeg", text: "복도 끝에서 끝까지 들리도록 아주 큰 소리로 떠든다.", isCorrect: false, rationale: "큰 소리로 떠들면 다른 교실의 수업이나 휴식에 큰 방해가 됩니다." },
-      { id: 3, imageSrc: "https://i.imgur.com/kRLV3ML.jpeg", text: "복도에서 술래잡기를 하며 쿵쿵 뛰어다닌다.", isCorrect: false, rationale: "복도에서 뛰면 다칠 위험이 매우 높습니다." },
-      { id: 4, imageSrc: "https://i.imgur.com/608zj1i.jpeg", text: "친구와 심한 욕설이나 거친 장난을 하며 논다.", isCorrect: false, rationale: "학교에서는 바르고 고운 말을 써야 하며 거친 장난은 금물입니다." }
-    ]
-  },
-  {
-    id: "rest",
-    category: "[채점] 혼자 쉬기",
-    question: "복도에서 혼자 쉴 때 알맞은 행동은 무엇일까요?",
-    condition: (answers) => answers.lastChoice === 3 && answers.hallwayChoice === 2,
-    hint: "다른 사람의 통행을 방해하지 않고 편안하게 쉬는 방법을 찾아보세요.",
-    options: [
-      { id: 1, imageSrc: "https://i.imgur.com/odwfb4K.jpeg", text: "창밖을 보거나 한쪽 벽에 기대어 통행에 방해되지 않게 차분히 쉰다.", isCorrect: true, rationale: "가벼운 휴식과 스트레칭은 다음 수업의 집중력을 높여줍니다." },
-      { id: 2, imageSrc: "https://i.imgur.com/S7Amjxb.jpeg", text: "복도 한가운데에 대자로 길게 드러누워 잠을 잔다.", isCorrect: false, rationale: "복도 바닥에 눕는 것은 통행을 방해하고 먼지가 많아 건강에 좋지 않습니다." },
-      { id: 3, imageSrc: "https://i.imgur.com/sNS9vJk.jpeg", text: "지나가는 다른 반 친구들에게 시비를 걸거나 장난을 친다.", isCorrect: false, rationale: "모르는 친구에게 무례하게 행동하면 갈등이 발생할 수 있습니다." },
-      { id: 4, imageSrc: "https://i.imgur.com/5XSB04N.png", text: "교실 문을 쾅쾅 열고 닫으며 돌아다닌다.", isCorrect: false, rationale: "주변 사람들을 놀라게 하고 휴식을 방해하는 행동입니다." }
-    ]
-  },
-  {
-    id: "checkLoop",
-    category: "[분기] 교실 복귀",
-    question: "볼일을 마치고 교실로 돌아왔습니다. 쉬는 시간 할 일을 다 했나요?",
-    isBranching: true,
-    options: [
-      { id: 1, imageSrc: "https://i.imgur.com/LjQGU51.jpeg", text: "아니요, 아직 볼일이 남았어요.", rationale: "다시 쉬는 시간 처음으로 돌아가 다른 할 일을 선택합니다." },
-      { id: 2, imageSrc: "https://i.imgur.com/rCdBS3x.jpeg", text: "네, 할 일을 다 했어요.", rationale: "이제 다음 시간표를 확인하는 단계로 넘어갑니다." }
-    ]
-  },
-  {
-    id: "checkTimetable",
-    category: "[3단계] 수업 확인",
-    question: "다음 시간표를 확인했습니다. 다음 시간은 어떤 수업인가요?",
-    isBranching: true,
-    condition: (answers) => answers.loopFinished === true, 
-    options: [
-      { id: 1, imageSrc: "https://i.imgur.com/wzinDZ4.jpeg", text: "교실 수업 (우리 반 교실)", rationale: "우리 교실에서 그대로 수업하는 상황으로 진행합니다." },
-      { id: 2, imageSrc: "https://i.imgur.com/B31KL7W.jpeg", text: "교과교실 수업 (과학실, 음악실 등 이동)", rationale: "다른 교실로 이동해서 수업하는 상황으로 진행합니다." }
-    ]
-  },
-  {
-    id: "classroomPrep",
-    category: "[채점] 교실 수업 준비",
-    question: "다음 시간이 '교실 수업'입니다. 알맞은 준비 행동은 무엇일까요?",
-    condition: (answers) => answers.loopFinished === true && answers.classType === 1,
-    hint: "선생님이 들어오셨을 때 바로 수업을 시작할 수 있게 내 책상을 어떻게 해야 할지 생각해보세요.",
-    options: [
-      { id: 1, imageSrc: "https://i.imgur.com/OeK1HoR.jpeg", text: "해당 교과목을 확인하고, 책상 위에 교과서와 필기도구를 꺼내 둔다.", isCorrect: true, rationale: "수업에 필요한 교재를 미리 꺼내 두면 빠르고 원활하게 수업을 시작할 수 있습니다." },
-      { id: 2, imageSrc: "https://i.imgur.com/plhOAEZ.jpeg", text: "수업과 상관없는 장난감이나 만화책을 책상 위에 그대로 둔다.", isCorrect: false, rationale: "수업과 무관한 물건은 가방이나 서랍에 꼭 넣어야 수업에 집중할 수 있습니다." },
-      { id: 3, imageSrc: "https://i.imgur.com/bhFkjuD.png", text: "책상 위를 텅 비워두고 엎드려 계속 잠을 잔다.", isCorrect: false, rationale: "책을 미리 꺼내놓지 않으면 수업 시작 시 허둥지둥하게 됩니다." },
-      { id: 4, imageSrc: "https://i.imgur.com/lP3Uu4G.jpeg", text: "다른 친구의 교과서를 허락 없이 가져와 내 책상에 둔다.", isCorrect: false, rationale: "자신의 물건은 스스로 챙겨야 하며, 남의 물건을 함부로 만지면 안 됩니다." }
-    ]
-  },
-  {
-    id: "moveClassPrep",
-    category: "[채점] 교과교실 이동",
-    question: "다음 시간이 컴퓨터실, 음악실 같은 '교과교실 수업'입니다. 알맞은 행동은 무엇일까요?",
-    condition: (answers) => answers.loopFinished === true && answers.classType === 2,
-    hint: "어느 교실로 가야 하는지, 무엇이 필요한지 먼저 생각해보세요.",
-    options: [
-      { id: 1, imageSrc: "https://i.imgur.com/fbFMGI1.jpeg", text: "이동할 교실을 확인하고, 수업 준비물을 챙겨서 조용히 이동한다.", isCorrect: true, rationale: "이동 수업 시에는 목적지를 알고 준비물을 챙겨가는 책임감이 필요합니다." },
-      { id: 2, imageSrc: "https://i.imgur.com/5zp56Cu.jpeg", text: "어디로 가는지도 모른 채 아무 곳으로 달려간다.", isCorrect: false, rationale: "목적지와 준비물을 스스로 챙기지 않으면 수업 시간에 지장을 주게 됩니다." },
-      { id: 3, imageSrc: "https://i.imgur.com/y7BO7Xs.jpeg", text: "가기 싫다며 교실에 들어가지 않는다.", isCorrect: false, rationale: "정해진 수업 장소로 이동하지 않으면 무단결과 처리될 수 있습니다." },
-      { id: 4, imageSrc: "https://i.imgur.com/8BYKg2I.jpeg", text: "이동하면서 친구와 큰 소리로 장난을 치며 다른 반을 방해한다.", isCorrect: false, rationale: "이동 중에는 다른 학급의 수업을 방해하지 않도록 조용히 이동해야 합니다." }
-    ]
-  }
-];
-
-const GlobalStyle = () => (
-  <style>{`
-    html, body, #root {
-      width: 100% !important;
-      min-height: 100vh !important;
-      max-width: none !important;
-      margin: 0 !important;
-      padding: 0 !important;
-      display: block !important;
-    }
-  `}</style>
-);
-
-export default function App() {
-  const [started, setStarted] = useState(false);
-  const [currentQuestionObj, setCurrentQuestionObj] = useState(quizData[0]); 
-  
+export default function ClassPrepQuiz() {
+  const [studentName, setStudentName] = useState("");
+  const [isStarted, setIsStarted] = useState(false);
+  const [showIntro, setShowIntro] = useState(false);
+  const [currentNode, setCurrentNode] = useState("q_start");
   const [score, setScore] = useState(0);
-  const [showFeedback, setShowFeedback] = useState(false);
-  const [selectedOption, setSelectedOption] = useState(null);
-  const [finished, setFinished] = useState(false);
+  const [visitedTasks, setVisitedTasks] = useState([]);
+  const [quizFinished, setQuizFinished] = useState(false);
+  const [saveMessage, setSaveMessage] = useState("");
+  const [shuffledOptions, setShuffledOptions] = useState([]);
+  const [feedback, setFeedback] = useState(null);
 
-  // 📝 학생 정보 상태
-  const [selectedClass, setSelectedClass] = useState("");
-  const [selectedStudent, setSelectedStudent] = useState("");
-  
-  // 📝 복잡한 분기(루프) 추적을 위한 상태 객체
-  const [sessionAnswers, setSessionAnswers] = useState({
-    lastChoice: null,     
-    hallwayChoice: null,  
-    loopFinished: false,  
-    classType: null,      
-    채점기록: [],
-    completedStep1Choices: [] // 이미 선택한 할 일 추적 배열
+  // 📝 학생의 문항별(O/X/안함) 결과를 추적하는 상태
+  const [results, setResults] = useState({
+    q_water: '안함',
+    q_toilet: '안함',
+    q_hallway_friend: '안함',
+    q_hallway_alone: '안함',
+    q_class_prep: '안함',
+    q_subject_prep: '안함'
   });
 
-  const [isSaving, setIsSaving] = useState(false);
-  const [saveMessage, setSaveMessage] = useState("");
-  const [displayOptions, setDisplayOptions] = useState([]);
+  // 👇 선생님의 구글 시트 앱스 스크립트 배포 URL로 꼭 변경해주세요!
+  const SCRIPT_URL = "선생님의_구글스크립트_URL을_여기에_넣어주세요";
 
-  // 🔀 보기를 필터링(제외) 및 무작위 섞기 해주는 헬퍼 함수
-  const generateOptions = (questionObj, currentAnswers) => {
-    if (!questionObj || !questionObj.options) return [];
-    let opts = [...questionObj.options];
-
-    // [핵심 로직 1] 1단계: 이미 완료한 활동 필터링 제외
-    if (questionObj.id === "step1") {
-      opts = opts.filter(o => !currentAnswers.completedStep1Choices.includes(o.id));
+  // 퀴즈 데이터
+  const quizData = {
+    intro: {
+      text: "쉬는 시간이 되었어요. 우리는 무엇을 해야 할까요?",
+      imageSrc: "", 
+    },
+    q_start: {
+      text: "쉬는 시간이 되었습니다. 무엇을 할까요?",
+      isBranching: true,
+      options: [
+        { id: "toilet", text: "화장실 다녀오기", nextId: "q_toilet" },
+        { id: "water", text: "물 마시기", nextId: "q_water" },
+        { id: "hallway", text: "복도에서 휴식하기", nextId: "q_hallway_branch" }
+      ]
+    },
+    q_toilet: {
+      text: "화장실에서 대소변을 본 후, 꼭 해야 할 바른 행동은 무엇일까요?",
+      options: [
+        { text: "비누를 묻혀 흐르는 물에 손을 깨끗하게 씻는다.", isCorrect: true, textFeedback: "참 잘했어요! 청결은 기본이죠." },
+        { text: "귀찮으니까 손을 씻지 않고 그냥 교실로 빨리 뛰어간다.", isCorrect: false, textFeedback: "손에 세균이 많아요. 꼭 씻어야 해요!" },
+        { text: "물만 살짝 묻히고 수건이나 옷에 쓱쓱 닦아버린다.", isCorrect: false, textFeedback: "비누를 사용해야 세균이 없어져요." },
+        { text: "친구에게 물을 튀기며 장난을 치다 교실로 돌아간다.", isCorrect: false, textFeedback: "화장실에서 장난치면 미끄러져 다칠 수 있어요." }
+      ],
+      nextId: "q_start"
+    },
+    q_water: {
+      text: "물을 마실 때 가장 바른 행동은 무엇일까요?",
+      options: [
+        { text: "개인 텀블러나 컵을 이용하여 물을 흘리지 않게 차분히 마신다.", isCorrect: true, textFeedback: "맞아요! 텀블러 사용은 환경도 보호해요." },
+        { text: "정수기 나오는 곳에 입을 대고 바로 마신다.", isCorrect: false, textFeedback: "위생에 아주 좋지 않은 행동이에요." },
+        { text: "정수기 앞에서 친구와 물을 뿌리며 물장난을 친다.", isCorrect: false, textFeedback: "주변이 물바다가 되면 친구들이 미끄러져 다쳐요." },
+        { text: "바닥에 물을 흘려도 닦지 않고 그냥 돌아간다.", isCorrect: false, textFeedback: "흘린 물은 휴지로 닦아야 안전해요." }
+      ],
+      nextId: "q_start"
+    },
+    q_hallway_branch: {
+      text: "복도에서 어떻게 휴식할 건가요?",
+      isBranching: true,
+      options: [
+        { text: "친구 만나기 (대화하기)", nextId: "q_hallway_friend" },
+        { text: "혼자 쉬기", nextId: "q_hallway_alone" }
+      ]
+    },
+    q_hallway_friend: {
+      text: "복도에서 친구를 만나 대화할 때 알맞은 행동은 무엇일까요?",
+      options: [
+        { text: "다른 반에 방해가 되지 않도록 조용하고 다정한 목소리로 대화한다.", isCorrect: true, textFeedback: "배려심 넘치는 모습 최고예요!" },
+        { text: "복도 끝에서 끝까지 들리도록 아주 큰 소리로 떠든다.", isCorrect: false, textFeedback: "수업 중인 다른 반에 큰 방해가 됩니다." },
+        { text: "복도에서 술래잡기를 하며 쿵쿵 뛰어다닌다.", isCorrect: false, textFeedback: "복도에서 뛰면 크게 다칠 수 있어요." },
+        { text: "친구와 심한 욕설이나 거친 장난을 하며 논다.", isCorrect: false, textFeedback: "바르고 고운 말을 써야 좋은 친구관계를 맺을 수 있어요." }
+      ],
+      nextId: "q_start"
+    },
+    q_hallway_alone: {
+      text: "복도에서 혼자 쉴 때 알맞은 행동은 무엇일까요?",
+      options: [
+        { text: "창밖을 보거나 한쪽 벽에 기대어 통행에 방해되지 않게 차분히 쉰다.", isCorrect: true, textFeedback: "조용히 휴식하는 방법을 잘 알고 있네요." },
+        { text: "복도 한가운데에 대자로 길게 드러누워 잠을 잔다.", isCorrect: false, textFeedback: "통행에 방해가 되고 다칠 수 있어요." },
+        { text: "지나가는 다른 반 친구들에게 시비를 걸거나 장난을 친다.", isCorrect: false, textFeedback: "다른 사람을 불편하게 하면 안 돼요." },
+        { text: "교실 문을 쾅쾅 열고 닫으며 돌아다닌다.", isCorrect: false, textFeedback: "소음은 다른 친구들의 휴식과 수업을 방해해요." }
+      ],
+      nextId: "q_start"
+    },
+    q_schedule: {
+      text: "교실로 돌아왔습니다. 다음 시간은 어떤 수업인가요?",
+      isBranching: true,
+      options: [
+        { text: "교실 수업 (우리 반 교실)", nextId: "q_class_prep" },
+        { text: "교과교실 수업 (과학실, 음악실 등 이동)", nextId: "q_subject_prep" }
+      ]
+    },
+    q_class_prep: {
+      text: "다음 시간이 '교실 수업'입니다. 알맞은 준비 행동은 무엇일까요?",
+      options: [
+        { text: "해당 교과목을 확인하고, 책상 위에 교과서와 필기도구를 꺼내 둔다.", isCorrect: true, textFeedback: "완벽한 수업 준비입니다!" },
+        { text: "수업과 상관없는 장난감이나 만화책을 책상 위에 그대로 둔다.", isCorrect: false, textFeedback: "책상 위에는 수업에 필요한 물건만 두세요." },
+        { text: "책상 위를 텅 비워두고 엎드려 계속 잠을 잔다.", isCorrect: false, textFeedback: "선생님이 오시기 전에 미리 수업 준비를 해야 해요." },
+        { text: "다른 친구의 교과서를 허락 없이 가져와 내 책상에 둔다.", isCorrect: false, textFeedback: "친구 물건을 허락 없이 만지면 안 돼요." }
+      ],
+      nextId: "end"
+    },
+    q_subject_prep: {
+      text: "다음 시간이 과학실, 음악실 같은 '교과교실 수업'입니다. 알맞은 행동은 무엇일까요?",
+      options: [
+        { text: "이동할 교실을 확인하고, 수업 준비물을 챙겨서 조용히 이동한다.", isCorrect: true, textFeedback: "이동 수업 준비의 정석입니다!" },
+        { text: "어디로 가는지도 모른 채 준비물 없이 무작정 앞 친구만 따라간다.", isCorrect: false, textFeedback: "스스로 시간표와 준비물을 확인해야 해요." },
+        { text: "가기 싫다며 우리 반 교실에 혼자 남아 있는다.", isCorrect: false, textFeedback: "정해진 수업 장소로 꼭 이동해야 합니다." },
+        { text: "이동하면서 친구와 큰 소리로 장난을 치며 다른 반을 방해한다.", isCorrect: false, textFeedback: "이동할 때는 사뿐사뿐 조용히 걸어야 해요." }
+      ],
+      nextId: "end"
     }
-
-    // [핵심 로직 2] 3가지 할 일을 모두 마쳤으면 "아니요" 옵션 강제 제거 (루프 탈출)
-    if (questionObj.id === "checkLoop" && currentAnswers.completedStep1Choices.length >= 3) {
-      opts = opts.filter(o => o.id !== 1);
-    }
-
-    // 분기 문항이 아니면(채점 문항) 보기 순서 무작위 섞기
-    if (!questionObj.isBranching) {
-      const shuffled = [...opts];
-      for (let i = shuffled.length - 1; i > 0; i--) {
-        const j = Math.floor(Math.random() * (i + 1));
-        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-      }
-      return shuffled;
-    }
-
-    return opts;
   };
 
-  const gradableQuestionsCount = sessionAnswers.채점기록.length;
+  useEffect(() => {
+    if (isStarted && !showIntro && !quizFinished && currentNode) {
+      const q = quizData[currentNode];
+      if (q && !q.isBranching) {
+        const shuffled = [...q.options].sort(() => Math.random() - 0.5);
+        setShuffledOptions(shuffled);
+      } else {
+        setShuffledOptions([]);
+      }
+    }
+  }, [currentNode, isStarted, showIntro, quizFinished]);
 
   const handleStart = () => {
-    setStarted(true);
-    setCurrentQuestionObj(quizData[0]); 
-    
-    const initialAnswers = {
-      lastChoice: null,
-      hallwayChoice: null,
-      loopFinished: false,
-      classType: null,
-      채점기록: [],
-      completedStep1Choices: []
-    };
-    setSessionAnswers(initialAnswers);
-    setDisplayOptions(generateOptions(quizData[0], initialAnswers));
-    
+    if (!studentName.trim()) {
+      alert("이름을 입력해주세요!");
+      return;
+    }
+    setIsStarted(true);
+    setShowIntro(true);
+    setCurrentNode("q_start");
     setScore(0);
-    setFinished(false);
-    setShowFeedback(false);
-    setSaveMessage(""); 
+    setVisitedTasks([]);
+    setQuizFinished(false);
+    setSaveMessage("");
+    setFeedback(null);
+    // 새 게임 시작 시 결과 초기화 (전부 '안함'으로 설정)
+    setResults({
+      q_water: '안함',
+      q_toilet: '안함',
+      q_hallway_friend: '안함',
+      q_hallway_alone: '안함',
+      q_class_prep: '안함',
+      q_subject_prep: '안함'
+    });
   };
 
   const handleOptionClick = (option) => {
-    if (showFeedback) return; 
-    setSelectedOption(option);
-    setShowFeedback(true);
+    const q = quizData[currentNode];
     
-    const updatedAnswers = { ...sessionAnswers };
-
-    // 분기점 상태 업데이트
-    if (currentQuestionObj.id === "step1") {
-      updatedAnswers.lastChoice = option.id;
-      if (!updatedAnswers.completedStep1Choices.includes(option.id)) {
-        updatedAnswers.completedStep1Choices.push(option.id);
+    // 분기점 문항 (채점 안 함)
+    if (q.isBranching) {
+      if (currentNode === "q_start" && option.id) {
+        setVisitedTasks([...visitedTasks, option.id]);
       }
-    } else if (currentQuestionObj.id === "hallway") {
-      updatedAnswers.hallwayChoice = option.id;
-    } else if (currentQuestionObj.id === "checkLoop") {
-      if (option.id === 2) updatedAnswers.loopFinished = true; // 루프 탈출
-    } else if (currentQuestionObj.id === "checkTimetable") {
-      updatedAnswers.classType = option.id;
-    }
-
-    // 채점 문항 기록
-    if (!currentQuestionObj.isBranching) {
-        if (option.isCorrect) setScore(prev => prev + 1);
-        updatedAnswers.채점기록.push(option.isCorrect ? 'O' : 'X');
-    }
-
-    setSessionAnswers(updatedAnswers);
-  };
-
-  const handleNextQuestion = () => {
-    // 1. 루프 마름모꼴에서 '아니요(1번)'를 누른 경우 강제로 step1로 이동 (도입부 건너뜀)
-    if (currentQuestionObj.id === "checkLoop" && selectedOption.id === 1) {
-      const step1 = quizData.find(q => q.id === "step1");
-      setCurrentQuestionObj(step1);
-      setDisplayOptions(generateOptions(step1, sessionAnswers));
-      setShowFeedback(false);
-      setSelectedOption(null);
+      setCurrentNode(option.nextId);
       return;
     }
 
-    // 도입부 화면에서 바로 step1으로 넘어가기 위한 처리
-    if (currentQuestionObj.id === "intro") {
-      const step1 = quizData.find(q => q.id === "step1");
-      setCurrentQuestionObj(step1);
-      setDisplayOptions(generateOptions(step1, sessionAnswers));
-      setShowFeedback(false);
-      setSelectedOption(null);
-      return;
-    }
-
-    // 2. 조건에 맞는 다음 문제 찾기
-    const currentIndex = quizData.findIndex(q => q.id === currentQuestionObj.id);
-    let nextIdx = currentIndex + 1;
-    
-    while (nextIdx < quizData.length) {
-      const nextQ = quizData[nextIdx];
-      if (!nextQ.condition || nextQ.condition(sessionAnswers)) {
-        break; 
-      }
-      nextIdx++;
-    }
-
-    if (nextIdx < quizData.length) {
-      const nextQ = quizData[nextIdx];
-      setCurrentQuestionObj(nextQ);
-      setDisplayOptions(generateOptions(nextQ, sessionAnswers));
-      setShowFeedback(false);
-      setSelectedOption(null);
+    // 채점 문항 (정답/오답 판별 및 기록)
+    if (option.isCorrect) {
+      setScore(s => s + 10);
+      setResults(prev => ({ ...prev, [currentNode]: 'O' }));
+      setFeedback({ isCorrect: true, text: option.textFeedback, nextId: option.nextId });
     } else {
-      setFinished(true); 
+      setResults(prev => ({ ...prev, [currentNode]: 'X' }));
+      setFeedback({ isCorrect: false, text: option.textFeedback, nextId: option.nextId });
     }
   };
 
-  const saveResultToSheet = async () => {
-    if (!selectedStudent) {
-      alert("선택된 학생이 없습니다.");
+  const handleNextAfterFeedback = () => {
+    if (feedback.nextId === "end") {
+      setQuizFinished(true);
+    } else {
+      setCurrentNode(feedback.nextId);
+    }
+    setFeedback(null);
+  };
+
+  const submitResults = async () => {
+    if (!SCRIPT_URL.includes("http")) {
+      setSaveMessage("선생님이 구글 시트 링크를 아직 연결하지 않았습니다.");
       return;
     }
+    setSaveMessage("전송 중... ⏳");
     
-    setIsSaving(true);
-    setSaveMessage("구글 시트에 저장 중입니다...");
-
     try {
+      // JSON 객체로 데이터 포장하기 (한글 깨짐 및 누락 방지)
+      const payload = {
+        name: studentName,
+        water: results.q_water,
+        toilet: results.q_toilet,
+        hallway_friend: results.q_hallway_friend,
+        hallway_alone: results.q_hallway_alone,
+        class_prep: results.q_class_prep,
+        subject_prep: results.q_subject_prep
+      };
+
       await fetch(SCRIPT_URL, {
-        method: 'POST',
-        mode: 'no-cors', 
-        body: JSON.stringify({
-          date: new Date().toLocaleString(),           
-          name: `${selectedClass} ${selectedStudent}`, 
-          location: "수업준비",                       
-          person: "루프포함",                           
-          score: score,                                
-          q1: sessionAnswers.채점기록[0] || "",                   
-          q2: sessionAnswers.채점기록[1] || "",                   
-          q3: sessionAnswers.채점기록[2] || "",                   
-          q4: sessionAnswers.채점기록[3] || "",                   
-          q5: sessionAnswers.채점기록[4] || "",                   
-          q6: sessionAnswers.채점기록[5] || ""                    
-        })
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "text/plain" }, // CORS 에러 방지를 위해 text/plain 사용
+        body: JSON.stringify(payload)
       });
       
       setSaveMessage("✅ 시트에 결과가 성공적으로 저장되었습니다!");
-    } catch (error) {
-      console.error("Error:", error);
-      setSaveMessage("❌ 저장에 실패했습니다.");
-    } finally {
-      setIsSaving(false);
+    } catch (err) {
+      setSaveMessage("❌ 전송 실패. 선생님께 말씀드려주세요.");
     }
   };
 
-  const getOptionStyle = (option) => {
-    if (!showFeedback) {
-        return 'hover:shadow-xl hover:-translate-y-1 hover:border-blue-300 border-2 border-transparent cursor-pointer';
-    }
-
-    if (currentQuestionObj.isBranching) {
-        if (selectedOption?.id === option.id) return 'border-4 border-blue-500 shadow-xl';
-        return 'opacity-40 border-2 border-gray-100';
-    } else {
-        if (selectedOption?.id === option.id && option.isCorrect) return 'border-4 border-green-500 shadow-xl';
-        if (selectedOption?.id === option.id && !option.isCorrect) return 'border-4 border-red-500 shadow-xl';
-        if (selectedOption?.id !== option.id && option.isCorrect) return 'border-4 border-green-300 opacity-60';
-        return 'opacity-40 border-2 border-gray-100';
-    }
-  };
-
-  const isOneOption = displayOptions?.length === 1;
-  const isTwoOptions = displayOptions?.length === 2;
-  const isThreeOptions = displayOptions?.length === 3;
-
-  if (!started) {
+  if (!isStarted) {
     return (
-      <>
-        <GlobalStyle />
-        <div className="min-h-screen bg-blue-50 flex flex-col p-3 sm:p-4 md:py-8 md:px-4 lg:px-8 w-full overflow-y-scroll overflow-x-hidden box-border">
-          <div className="w-full max-w-4xl mx-auto flex flex-col h-full box-border">
-            
-            <div className="bg-white rounded-2xl shadow-sm px-4 py-3 sm:p-4 md:px-6 mb-4 sm:mb-6 flex justify-between items-center w-full box-border">
-              <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-800 truncate flex-1 pr-2">
-                🏫 수업 준비 퀴즈 (플로우차트)
-              </h1>
-              <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-                <span className="font-medium text-amber-600 text-sm sm:text-base font-bold">
-                  준비 단계
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-md p-5 sm:p-6 md:p-8 mb-6 border-t-8 border-amber-400 flex-1 flex flex-col items-stretch text-center w-full box-border">
-              <h2 className="text-xl sm:text-2xl md:text-3xl font-bold text-amber-700 mb-4 sm:mb-6 text-center">수업 준비, 어떻게 할까요?</h2>
-              <p className="text-amber-800 font-medium mb-6 sm:mb-8 bg-amber-50 border border-amber-200 p-4 sm:p-5 rounded-xl text-sm sm:text-base md:text-lg text-center">
-                쉬는 시간에 할 일을 다 하고 다음 수업을 준비하는 퀴즈입니다.<br />
-                상황에 맞는 올바른 행동을 선택해 보세요!
-              </p>
-
-              <div className="bg-gray-50 p-5 sm:p-6 md:p-8 rounded-xl mb-4 border border-gray-200 flex flex-col items-stretch w-full box-border">
-                <h3 className="font-bold text-gray-700 mb-5 text-center text-lg sm:text-xl">
-                  <span>👤</span> 내 이름 선택하기
-                </h3>
-                
-                <div className="flex flex-wrap justify-center gap-2 sm:gap-4 mb-2 box-border">
-                  {Object.keys(classData).map(className => (
-                    <button
-                      key={className}
-                      onClick={() => {
-                        setSelectedClass(className);
-                        setSelectedStudent(""); 
-                      }}
-                      className={`flex-1 min-w-[100px] max-w-[140px] py-4 px-2 rounded-xl flex items-center justify-center gap-2 border-2 transition-all duration-200 box-border ${
-                        selectedClass === className
-                          ? 'border-amber-500 bg-amber-100 text-amber-800 font-bold shadow-sm'
-                          : 'border-gray-200 bg-white text-gray-600 hover:border-amber-300 hover:bg-amber-50'
-                      }`}
-                    >
-                      <span className="text-lg sm:text-xl">🏫</span>
-                      <span className="text-sm sm:text-base whitespace-nowrap">{className}</span>
-                    </button>
-                  ))}
-                </div>
-
-                {selectedClass && (
-                  <div className="animate-fade-in mt-8 w-full box-border">
-                    <div className="w-full border-t border-gray-200 mb-5"></div>
-                    <h4 className="text-gray-600 font-medium mb-4 text-center text-lg">
-                      <span>👉</span> 이제 이름을 클릭하세요!
-                    </h4>
-                    <div className="flex flex-wrap justify-center gap-2 sm:gap-4 box-border">
-                      {classData[selectedClass].map(studentName => (
-                        <button
-                          key={studentName}
-                          onClick={() => setSelectedStudent(studentName)}
-                          className={`flex-1 min-w-[90px] max-w-[120px] py-4 sm:py-5 px-2 rounded-xl flex flex-col items-center justify-center gap-1 sm:gap-2 border-2 transition-all duration-200 box-border ${
-                            selectedStudent === studentName
-                              ? 'border-blue-500 bg-blue-100 text-blue-800 font-bold shadow-md transform scale-105'
-                              : 'border-gray-200 bg-white text-gray-600 hover:border-blue-300 hover:bg-blue-50 hover:-translate-y-1'
-                          }`}
-                        >
-                          <span className="text-2xl sm:text-4xl">🧑‍🎓</span>
-                          <span className="text-sm sm:text-lg whitespace-nowrap">{studentName}</span>
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-
-            <button 
-              onClick={handleStart}
-              disabled={!selectedStudent}
-              className={`w-full text-white font-bold py-4 px-6 rounded-2xl transition duration-200 shadow-md text-xl flex items-center justify-center box-border
-                ${selectedStudent ? 'bg-amber-500 hover:bg-amber-600' : 'bg-gray-300 cursor-not-allowed'}`}
-            >
-              {selectedStudent ? '퀴즈 시작하기' : '이름을 선택해야 시작할 수 있어요'}
-            </button>
-          </div>
+      <div className="min-h-screen bg-blue-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-xl p-8 max-w-md w-full text-center">
+          <h1 className="text-3xl font-black text-blue-800 mb-6 tracking-tight">🏫 쉬는 시간 수업 준비 퀴즈</h1>
+          <p className="text-gray-600 mb-6 font-medium">나의 이름을 적고 시작해볼까요?</p>
+          <input 
+            type="text" 
+            placeholder="이름 입력 (예: 홍길동)"
+            className="w-full px-5 py-4 border-2 border-blue-200 rounded-xl mb-6 text-center text-lg focus:outline-none focus:border-blue-500 font-bold"
+            value={studentName}
+            onChange={(e) => setStudentName(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && handleStart()}
+          />
+          <button 
+            onClick={handleStart}
+            className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-xl transition shadow-lg text-lg"
+          >
+            퀴즈 시작하기 🚀
+          </button>
         </div>
-      </>
+      </div>
     );
   }
 
-  if (finished) {
+  if (showIntro) {
     return (
-      <>
-        <GlobalStyle />
-        <div className="min-h-screen bg-blue-50 flex flex-col p-3 sm:p-4 md:py-8 md:px-4 lg:px-8 w-full overflow-y-scroll overflow-x-hidden box-border">
-          <div className="w-full max-w-4xl mx-auto flex flex-col h-full box-border">
-            
-            <div className="bg-white rounded-2xl shadow-sm px-4 py-3 sm:p-4 md:px-6 mb-4 sm:mb-6 flex justify-between items-center w-full box-border">
-              <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-800 truncate flex-1 pr-2">
-                🏫 수업 준비 퀴즈 결과
-              </h1>
-              <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-                <span className="font-medium text-blue-600 text-sm sm:text-base font-bold">
-                  모든 문제 완료!
-                </span>
-              </div>
-            </div>
-
-            <div className="bg-white rounded-2xl shadow-md p-5 sm:p-6 md:p-8 mb-6 border-t-8 border-amber-400 flex-1 flex flex-col items-stretch text-center w-full box-border">
-              <div className="text-5xl sm:text-6xl md:text-7xl mb-4 sm:mb-6 text-center">🏆</div>
-              <h2 className="text-2xl sm:text-3xl md:text-4xl font-bold text-gray-800 mb-3 sm:mb-4 text-center">퀴즈 완료!</h2>
-              <p className="text-lg sm:text-xl md:text-2xl text-gray-600 mb-6 sm:mb-8 text-center">
-                총 {gradableQuestionsCount}번의 선택 중 <span className="font-bold text-amber-600 text-2xl sm:text-3xl">{score}</span>문제를 맞혔습니다!
-              </p>
-              <div className="bg-amber-100 p-4 sm:p-5 rounded-lg mb-8 sm:mb-10 text-amber-800 font-medium text-sm sm:text-base md:text-lg text-center box-border">
-                {score === gradableQuestionsCount ? "완벽해요! 바른 행동을 잘 골라 수업 준비를 마쳤습니다!" : 
-                 "아쉽지만 다시 한번 도전해서 완벽한 수업 준비를 해보아요!"}
-              </div>
-
-              <div className="bg-gray-50 p-5 sm:p-6 md:p-8 rounded-xl border border-gray-200 flex flex-col items-stretch w-full box-border">
-                <h3 className="font-bold text-gray-700 mb-4 text-center text-base sm:text-lg md:text-xl">
-                  <span>📝</span> 선생님께 결과 제출하기
-                </h3>
-                <div className="flex flex-col md:flex-row gap-3 sm:gap-4 w-full box-border">
-                  <div className="flex-1 px-4 py-3 sm:px-5 sm:py-4 bg-white border border-gray-300 rounded-lg text-gray-700 flex flex-col justify-center box-border">
-                    <span className="text-xs sm:text-sm text-gray-500 block mb-1 text-center">제출 정보</span>
-                    <span className="font-bold text-lg sm:text-xl block text-center">{selectedClass} {selectedStudent}</span>
-                  </div>
-                  <button 
-                    onClick={saveResultToSheet}
-                    disabled={isSaving || saveMessage.includes("✅") || !SCRIPT_URL.includes("http")}
-                    className="w-full md:w-auto md:min-w-[200px] bg-blue-600 hover:bg-blue-700 text-white font-bold py-3 sm:py-4 px-6 rounded-lg transition text-base sm:text-lg disabled:opacity-50 disabled:cursor-not-allowed shadow-md flex justify-center items-center box-border"
-                  >
-                    {isSaving ? "저장 중..." : "결과 전송하기"}
-                  </button>
-                </div>
-                {saveMessage && (
-                  <p className={`mt-4 text-base font-bold text-center w-full ${saveMessage.includes("❌") ? 'text-red-500' : 'text-green-600'}`}>
-                    {saveMessage}
-                  </p>
-                )}
-                {!SCRIPT_URL.includes("http") && (
-                  <p className="mt-3 text-sm text-red-500 font-bold text-center w-full">
-                    ※ 선생님이 구글 시트 링크를 연결해야 제출이 가능해요!
-                  </p>
-                )}
-              </div>
-            </div>
-
+      <div className="min-h-screen bg-amber-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-xl overflow-hidden max-w-lg w-full flex flex-col">
+          <div className="p-8 text-center bg-amber-100 flex-grow flex flex-col justify-center items-center">
+            <div className="text-6xl mb-6">🔔</div>
+            <h2 className="text-2xl font-black text-amber-900 mb-4">{quizData.intro.text}</h2>
+            {quizData.intro.imageSrc ? (
+              <img src={quizData.intro.imageSrc} alt="상황 그림" className="rounded-xl shadow-md w-full max-h-64 object-cover mb-4" />
+            ) : (
+              <div className="w-full h-48 bg-white/50 rounded-xl flex items-center justify-center text-amber-300 text-5xl shadow-inner mb-4">🖼️</div>
+            )}
+            <p className="text-amber-800 font-medium">자, 이제 어떤 활동을 할지 스스로 선택해 봅시다!</p>
+          </div>
+          <div className="p-4 bg-white">
             <button 
-              onClick={handleStart}
-              disabled={!saveMessage.includes("✅") && SCRIPT_URL.includes("http")}
-              className={`w-full text-white font-bold py-4 px-6 rounded-2xl transition duration-200 shadow-md text-xl flex justify-center items-center box-border
-                ${(!saveMessage.includes("✅") && SCRIPT_URL.includes("http")) 
-                  ? 'bg-gray-400 cursor-not-allowed opacity-80' 
-                  : 'bg-amber-500 hover:bg-amber-600'}`}
+              onClick={() => setShowIntro(false)}
+              className="w-full bg-amber-500 hover:bg-amber-600 text-white font-bold py-4 rounded-xl shadow-md text-lg transition"
             >
-              {(!saveMessage.includes("✅") && SCRIPT_URL.includes("http")) ? '결과를 전송해야 다시 풀 수 있어요 🔒' : '다시 풀어보기'}
+              활동 고르러 가기 ➔
             </button>
           </div>
         </div>
-      </>
+      </div>
     );
   }
 
-  return (
-    <>
-      <GlobalStyle />
-      <div className="min-h-screen bg-blue-50 flex flex-col p-3 sm:p-4 md:py-8 md:px-4 lg:px-8 w-full overflow-y-scroll overflow-x-hidden box-border">
-        <div className="w-full max-w-4xl mx-auto flex flex-col h-full box-border">
+  if (quizFinished) {
+    return (
+      <div className="min-h-screen bg-green-50 flex items-center justify-center p-4">
+        <div className="bg-white rounded-3xl shadow-xl p-8 max-w-md w-full text-center">
+          <div className="text-6xl mb-4">🎉</div>
+          <h2 className="text-3xl font-black text-green-800 mb-2">수고했어요, {studentName}님!</h2>
+          <p className="text-gray-600 font-medium mb-6">수업 준비를 훌륭하게 마쳤습니다.</p>
           
-          <div className="bg-white rounded-2xl shadow-sm px-4 py-3 sm:p-4 md:px-6 mb-4 sm:mb-6 flex justify-between items-center w-full box-border">
-            <h1 className="text-lg sm:text-xl md:text-2xl font-bold text-gray-800 truncate flex-1 pr-2">
-              🏫 수업 준비 퀴즈{currentQuestionObj.category ? ` ${currentQuestionObj.category}` : ''}
-            </h1>
-            <div className="flex items-center gap-2 sm:gap-4 flex-shrink-0">
-              <span className="font-medium text-gray-500 text-sm sm:text-base">
-                진행 중
-              </span>
-              <div className="w-20 sm:w-32 h-3 bg-gray-200 rounded-full overflow-hidden">
-                <div 
-                  className="h-full bg-blue-500 transition-all duration-300 ease-out"
-                  style={{ width: `70%` }} 
-                ></div>
-              </div>
-            </div>
+          <div className="bg-green-100 p-6 rounded-2xl mb-6">
+            <p className="text-sm text-green-700 font-bold mb-1">나의 획득 점수</p>
+            <p className="text-5xl font-black text-green-600">{score}점</p>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-md p-5 sm:p-6 md:p-8 mb-6 border-l-8 border-amber-400 w-full flex flex-col items-stretch box-border">
-            <h2 className="text-xl sm:text-2xl md:text-2xl font-bold text-gray-800 mb-3 sm:mb-4 leading-tight">
-              {currentQuestionObj.question}
-            </h2>
-            {currentQuestionObj.hint && (
-              <div className="bg-amber-50 border-l-4 border-amber-300 p-3 sm:p-4 rounded-r text-amber-900 text-xs sm:text-sm flex gap-2 w-full box-border">
-                <span className="font-bold whitespace-nowrap">💡 힌트:</span>
-                <span>{currentQuestionObj.hint}</span>
-              </div>
+          <div className="space-y-3 mb-6">
+            <button 
+              onClick={submitResults}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 px-6 rounded-xl transition shadow-md text-lg flex items-center justify-center"
+            >
+              📊 선생님께 결과 전송하기
+            </button>
+            {saveMessage && (
+              <p className={`font-bold ${saveMessage.includes("✅") ? "text-green-600" : "text-red-500"}`}>
+                {saveMessage}
+              </p>
             )}
           </div>
 
-          {currentQuestionObj.isIntro ? (
-            <div className="w-full flex flex-col items-center bg-transparent mb-6 box-border animate-fade-in-up">
-              <div className="w-full h-[250px] sm:h-[400px] md:h-[500px] bg-white rounded-2xl overflow-hidden relative flex items-center justify-center shadow-md border border-gray-100 mb-6 group">
-                 <img 
-                    src={currentQuestionObj.introImageSrc} 
-                    alt="도입 그림" 
-                    className="w-full h-full object-contain p-2"
-                    onError={(e) => {
-                      e.target.style.display = 'none';
-                      if(e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
-                    }}
-                 />
-                 <div className="hidden absolute inset-0 bg-gray-100 flex-col items-center justify-center p-4 box-border">
-                    <span className="text-5xl sm:text-7xl mb-4">🖼️</span>
-                    <span className="text-gray-500 text-center text-base sm:text-lg font-medium px-2">
-                       이곳에 도입부 이미지가 표시됩니다<br/>(코드를 수정해 이미지 주소를 넣어주세요)
-                    </span>
-                 </div>
-              </div>
-              <button 
-                onClick={handleNextQuestion}
-                className="w-full md:w-auto md:px-20 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl transition-transform duration-200 hover:-translate-y-1 shadow-lg py-4 sm:py-5 text-lg sm:text-xl flex justify-center items-center box-border"
-              >
-                활동 고르러 가기 ➔
-              </button>
-            </div>
-          ) : (
-            <>
-              <div className={`w-full grid gap-3 sm:gap-6 mb-6 sm:mb-8 box-border 
-                ${isOneOption ? 'grid-cols-1 max-w-sm mx-auto' : 
-                  isTwoOptions ? 'grid-cols-1 sm:grid-cols-2' : 
-                  isThreeOptions ? 'grid-cols-1 sm:grid-cols-3' : 'grid-cols-2'}`}>
-                {displayOptions.map((option) => (
-                  <button
-                    key={option.id}
-                    onClick={() => handleOptionClick(option)}
-                    disabled={showFeedback}
-                    className={`w-full relative text-left flex flex-col bg-white rounded-2xl overflow-hidden transition-all duration-200 shadow-md box-border ${getOptionStyle(option)} ${
-                      isOneOption || isTwoOptions || isThreeOptions ? 'h-[180px] sm:h-[344px] md:h-[400px]' : 'h-[180px] sm:h-[220px] md:h-[280px]'
-                    }`}
-                  >
-                    <div className="w-full flex-1 bg-amber-50 flex items-center justify-center border-b border-gray-100 relative overflow-hidden group box-border">
-                       <img 
-                          src={option.imageSrc} 
-                          alt="상황 그림" 
-                          className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                            if(e.target.nextSibling) e.target.nextSibling.style.display = 'flex';
-                          }}
-                       />
-                       <div className="hidden absolute inset-0 bg-gray-100 flex-col items-center justify-center p-4 box-border">
-                          <span className="text-4xl mb-2">🖼️</span>
-                          <span className="text-gray-500 text-center text-sm font-medium px-2">
-                             이곳에 이미지가 표시됩니다
-                          </span>
-                       </div>
-                       
-                       {showFeedback && currentQuestionObj.isBranching && selectedOption?.id === option.id && (
-                         <div className="absolute top-2 right-2 sm:top-4 sm:right-4 bg-blue-500 text-white rounded-full w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center text-xl sm:text-2xl font-bold shadow-lg z-10 animate-bounce">✓</div>
-                       )}
-                       {showFeedback && !currentQuestionObj.isBranching && option.isCorrect && (
-                         <div className="absolute top-2 right-2 sm:top-4 sm:right-4 bg-green-500 text-white rounded-full w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center text-xl sm:text-2xl font-bold shadow-lg z-10 animate-bounce">O</div>
-                       )}
-                       {showFeedback && !currentQuestionObj.isBranching && selectedOption?.id === option.id && !option.isCorrect && (
-                         <div className="absolute top-2 right-2 sm:top-4 sm:right-4 bg-red-500 text-white rounded-full w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center text-xl sm:text-2xl font-bold shadow-lg z-10">X</div>
-                       )}
-                    </div>
-                    
-                    <div className={`shrink-0 overflow-y-auto custom-scrollbar flex items-center w-full box-border ${
-                      isOneOption || isTwoOptions || isThreeOptions ? 'p-3 sm:p-5 h-[60px] sm:h-[80px]' : 'p-2 sm:p-4 h-[60px] sm:h-[70px]'
-                    }`}>
-                      <p className={`text-gray-800 font-medium leading-snug sm:leading-relaxed w-full ${
-                        isOneOption || isTwoOptions || isThreeOptions ? 'text-sm sm:text-lg' : 'text-xs sm:text-base'
-                      }`}>{option.text}</p>
-                    </div>
-                  </button>
-                ))}
-              </div>
-
-              {showFeedback && (
-                <div className={`bg-white rounded-2xl shadow-xl animate-fade-in-up border-t-8 p-4 sm:p-5 md:p-6 mb-6 mt-2 w-full flex flex-col items-stretch box-border
-                  ${currentQuestionObj.isBranching ? 'border-blue-500' : selectedOption?.isCorrect ? 'border-green-500' : 'border-red-500'}`}>
-                  
-                  <div className="flex items-center gap-3 sm:gap-4 mb-3 w-full box-border">
-                    {currentQuestionObj.isBranching ? (
-                      <div className="text-blue-600 font-bold text-lg sm:text-xl flex items-center gap-2">
-                        <span>🎯</span> 선택 완료!
-                      </div>
-                    ) : selectedOption?.isCorrect ? (
-                      <div className="text-green-600 font-bold text-lg sm:text-xl flex items-center gap-2">
-                        <span>🎉</span> 정답입니다!
-                      </div>
-                    ) : (
-                      <div className="text-red-600 font-bold text-lg sm:text-xl flex items-center gap-2">
-                        <span>😅</span> 아쉽네요, 오답입니다.
-                      </div>
-                    )}
-                  </div>
-                  
-                  <p className="text-gray-800 leading-relaxed bg-gray-50 rounded-xl border border-gray-100 text-sm sm:text-base mb-4 p-3 sm:p-4 w-full box-border">
-                    <strong className="text-blue-600">해설:</strong> {selectedOption?.rationale}
-                  </p>
-                  
-                  <button 
-                    onClick={handleNextQuestion}
-                    className="w-full md:w-auto md:px-12 md:self-end bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition duration-200 shadow-md py-3 sm:py-3 text-base flex justify-center items-center box-border"
-                  >
-                    {['classroomPrep', 'moveClassPrep'].includes(currentQuestionObj.id) ? '결과 보기 ➔' : '다음 단계로 ➔'}
-                  </button>
-                </div>
-              )}
-            </>
-          )}
-
+          <button 
+            onClick={handleStart}
+            disabled={!saveMessage.includes("✅") && SCRIPT_URL.includes("http")}
+            className={`w-full font-bold py-4 px-6 rounded-xl transition text-lg shadow-sm
+              ${(!saveMessage.includes("✅") && SCRIPT_URL.includes("http")) 
+                ? 'bg-gray-200 text-gray-500 cursor-not-allowed' 
+                : 'bg-green-500 hover:bg-green-600 text-white'}`}
+          >
+            {(!saveMessage.includes("✅") && SCRIPT_URL.includes("http")) ? '전송 완료 후 다시 풀기 🔒' : '처음부터 다시 풀기 🔄'}
+          </button>
         </div>
       </div>
-    </>
+    );
+  }
+
+  const q = quizData[currentNode];
+  
+  let displayOptions = q.options;
+  if (currentNode === "q_start") {
+    displayOptions = q.options.filter(opt => !visitedTasks.includes(opt.id));
+    displayOptions.push({ 
+      text: "🚶 교실로 돌아가기 (다음 시간표 확인)", 
+      nextId: "q_schedule" 
+    });
+  } else if (!q.isBranching && shuffledOptions.length > 0) {
+    displayOptions = shuffledOptions;
+  }
+
+  return (
+    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
+      <div className="bg-white rounded-3xl shadow-xl overflow-hidden max-w-lg w-full flex flex-col h-[90vh]">
+        
+        <div className="bg-blue-600 p-4 text-white flex justify-between items-center shrink-0 shadow-md z-10">
+          <div className="font-bold text-lg bg-blue-700 px-3 py-1 rounded-lg">👤 {studentName}</div>
+          <div className="font-black text-xl text-yellow-300 drop-shadow-md">⭐ {score}점</div>
+        </div>
+
+        <div className="p-8 text-center flex-grow flex flex-col justify-center overflow-y-auto">
+          <h2 className="text-2xl md:text-3xl font-black text-gray-800 leading-snug break-keep">
+            {q.text}
+          </h2>
+        </div>
+
+        {feedback && (
+          <div className="absolute inset-0 bg-black/60 flex items-center justify-center p-4 z-20 backdrop-blur-sm">
+            <div className="bg-white rounded-3xl p-8 max-w-sm w-full text-center shadow-2xl transform transition-all scale-100">
+              <div className="text-7xl mb-4">
+                {feedback.isCorrect ? "⭕" : "❌"}
+              </div>
+              <h3 className={`text-2xl font-black mb-3 ${feedback.isCorrect ? "text-green-600" : "text-red-500"}`}>
+                {feedback.isCorrect ? "정답입니다!" : "아쉬워요!"}
+              </h3>
+              <p className="text-gray-700 font-medium text-lg mb-8 leading-relaxed break-keep">
+                {feedback.text}
+              </p>
+              <button 
+                onClick={handleNextAfterFeedback}
+                className="w-full bg-blue-600 hover:bg-blue-700 text-white font-bold py-4 rounded-xl shadow-lg text-lg transition"
+              >
+                다음 단계로 ➔
+              </button>
+            </div>
+          </div>
+        )}
+
+        <div className="p-4 bg-gray-100 shrink-0">
+          <div className="flex flex-col gap-3">
+            {displayOptions.map((option, idx) => (
+              <button
+                key={idx}
+                onClick={() => handleOptionClick(option)}
+                className={`w-full text-left font-bold py-4 px-6 rounded-2xl transition duration-200 shadow-sm text-lg md:text-xl border-2 hover:-translate-y-1 hover:shadow-md break-keep flex items-center
+                  ${q.isBranching 
+                    ? 'bg-indigo-50 border-indigo-200 text-indigo-900 hover:bg-indigo-100 hover:border-indigo-300' 
+                    : 'bg-white border-gray-200 text-gray-800 hover:border-blue-400 hover:bg-blue-50'}`}
+              >
+                <span className="mr-3 text-2xl opacity-60">
+                  {q.isBranching ? '👉' : ['A', 'B', 'C', 'D'][idx]}
+                </span>
+                <span>{option.text}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
